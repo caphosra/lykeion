@@ -1,9 +1,33 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::ops::Deref;
 
 pub trait Node: Debug + ToString {
     fn evaluate(&self, props: &HashMap<&str, bool>) -> bool;
-    fn retrieve(&self) -> Vec<&str>;
+    fn retrieve(&self) -> HashSet<&str>;
+
+    fn get_all_propositions(&self) -> Vec<&str> {
+        let mut props = self.retrieve().iter().cloned().collect::<Vec<&str>>();
+        props.sort();
+        props
+    }
+
+    fn is_tautology(&self, props: &Vec<&str>) -> Option<bool> {
+        if props.len() > 15 {
+            None
+        } else {
+            for i in 0..1 << props.len() {
+                let mut map = HashMap::new();
+                for (c, p) in props.iter().enumerate() {
+                    map.insert(p.deref(), ((i >> c) & 1) == 1);
+                }
+                if !self.evaluate(&map) {
+                    return Some(false);
+                }
+            }
+            Some(true)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -38,8 +62,8 @@ impl Node for AndNode {
         true
     }
 
-    fn retrieve(&self) -> Vec<&str> {
-        let mut props = Vec::new();
+    fn retrieve(&self) -> HashSet<&str> {
+        let mut props = HashSet::new();
         for child in &self.children {
             let child_props = child.retrieve();
             props.extend(child_props);
@@ -86,8 +110,8 @@ impl Node for OrNode {
         false
     }
 
-    fn retrieve(&self) -> Vec<&str> {
-        let mut props = Vec::new();
+    fn retrieve(&self) -> HashSet<&str> {
+        let mut props = HashSet::new();
         for child in &self.children {
             let child_props = child.retrieve();
             props.extend(child_props);
@@ -119,14 +143,11 @@ impl Node for IfThenNode {
         !self.left.evaluate(props) || self.right.evaluate(props)
     }
 
-    fn retrieve(&self) -> Vec<&str> {
-        let mut props = Vec::new();
-
-        let child_props = self.left.retrieve();
-        props.extend(child_props);
+    fn retrieve(&self) -> HashSet<&str> {
+        let mut props = self.left.retrieve();
 
         let child_props = self.right.retrieve();
-        props.extend(child_props);
+        props.extend(child_props.iter());
 
         props
     }
@@ -154,7 +175,7 @@ impl Node for NotNode {
         !self.child.evaluate(props)
     }
 
-    fn retrieve(&self) -> Vec<&str> {
+    fn retrieve(&self) -> HashSet<&str> {
         self.child.retrieve()
     }
 }
@@ -181,8 +202,10 @@ impl Node for PropositionNode {
         props.get(&self.name.as_ref()).unwrap().clone()
     }
 
-    fn retrieve(&self) -> Vec<&str> {
-        vec![&self.name]
+    fn retrieve(&self) -> HashSet<&str> {
+        let mut set = HashSet::new();
+        set.insert(self.name.as_ref());
+        set
     }
 }
 
@@ -199,7 +222,7 @@ pub struct ContradictionNode;
 
 impl ToString for ContradictionNode {
     fn to_string(&self) -> String {
-        "X".to_string()
+        "⊥".to_string()
     }
 }
 
@@ -208,8 +231,8 @@ impl Node for ContradictionNode {
         false
     }
 
-    fn retrieve(&self) -> Vec<&str> {
-        vec![]
+    fn retrieve(&self) -> HashSet<&str> {
+        HashSet::new()
     }
 }
 
